@@ -1,0 +1,633 @@
+---
+title: "Classification"
+author: "Yifei Xu"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE}
+#Preparation
+library(tidyverse)
+library(forecast)
+library(leaps)
+library(tidyr)
+library(ggplot2)
+library(pastecs)
+library(gtable)
+library(grid)
+library(cowplot)
+library(GGally)
+library(car)
+library(AER)
+library(leaps)
+library(ggpubr)
+library(psych)
+library(summarytools)
+library(Hmisc)
+library(gains)
+library(caret)
+library(caTools)
+library(FNN)
+library(class)
+library(gmodels)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(adabag)
+library(MASS)
+library(lmtest)
+library(pROC)
+library(ROCR)
+setwd("C:/xxx/xxx")
+engy.df <- read.csv("energy_weather.csv")
+```
+
+
+```{r, echo = FALSE}
+#Part 1. Descriptive Statistics
+kv.df <- engy.df[c(2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,20,22,23,26,27,28,29,30,31,32,33)]
+options("scipen"=100, "digits"=2)
+stat.desc(kv.df, basic = F)
+describe(kv.df)
+
+view(dfSummary(kv.df, plain.ascii = FALSE, style = "grid", graph.magnif = 0.75, valid.col = T, Missing.col = F, tmp.img.dir = "/tmp"))
+```
+
+
+```{r, echo = FALSE}
+# Plot boxplot of LOAD and PRICE by Hour
+p1 <- ggplot(kv.df, aes(hour,total.load.actual)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2)  + theme_bw() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +  theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + scale_x_discrete(name = "") + scale_y_continuous(name = "Total Load Actual") + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+p2 <- ggplot(kv.df, aes(hour,price.actual)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2)  + theme_bw() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +  theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + scale_x_discrete(name = "Hour") + scale_y_continuous(name = "Price Actual")+scale_x_discrete(breaks=c("00:00:00+00:00","01:00:00+00:00","02:00:00+00:00","03:00:00+00:00","04:00:00+00:00","05:00:00+00:00","06:00:00+00:00","07:00:00+00:00","08:00:00+00:00","09:00:00+00:00","10:00:00+00:00","11:00:00+00:00","12:00:00+00:00","13:00:00+00:00","14:00:00+00:00","15:00:00+00:00","16:00:00+00:00","17:00:00+00:00","18:00:00+00:00","19:00:00+00:00","20:00:00+00:00","21:00:00+00:00","22:00:00+00:00","23:00:00+00:00"),
+        labels=c("0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"))
+g1 <- ggplotGrob(p1)
+g2 <- ggplotGrob(p2)
+g <- rbind(g1, g2, size="first")
+g$widths <- unit.pmax(g1$widths, g2$widths) 
+g$layout[grepl("guide", g$layout$name),c("t","b")] <- c(1,nrow(g))
+grid.newpage()
+grid.draw(g)
+```
+
+
+```{r, echo = FALSE}
+# Plot Boxplot of Weather Features
+temp <- ggplot(kv.df, aes(y=temp)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Temprature in Kelvin") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+pres <- ggplot(kv.df, aes(y=pressure)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Pressure in hPa") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+hmdy <- ggplot(kv.df, aes(y=humidity)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Humidity in %") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+wind_s <- ggplot(kv.df, aes(y=wind_speed)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Wind Speed in m/s") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+wind_d <- ggplot(kv.df, aes(y=wind_deg)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Wind Direction") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+rain_1 <- ggplot(kv.df, aes(y=rain_1h)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Rain in Past 1 Hour in mm") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+rain_3 <- ggplot(kv.df, aes(y=rain_3h)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Rain in Past 3 Hours in mm") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+snow_3 <- ggplot(kv.df, aes(y=snow_3h)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Snow in Past 3 Hours in mm") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+cloud <- ggplot(kv.df, aes(y=clouds_all)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "Cloud Cover in %") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+plot_grid(temp, pres, hmdy, wind_s, wind_d, rain_1, rain_3, snow_3, cloud, labels = "")
+
+```
+
+
+```{r, echo = FALSE}
+# Plot boxplot of Generations
+names(kv.df) <- c("hour","g.biomass","g.fosill.brown.coal","g.fossil.gas","g.fossil.hard.coal","g.fossil.oil","g.hydro.pumped","g.hydro.run","g.hydro.reservoir","g.nuclear","g.other","g.renewable","g.solar","g.waste","g.wind.onshore","load","price","tmp","prs","hmd","w_speed","w_direction","rain_1","rain_3","snow_3","clouds%")
+
+g1 <- ggplot(kv.df, aes(y=g.biomass)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.biomass") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g2 <- ggplot(kv.df, aes(y=g.fosill.brown.coal)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.fosill.brown.coal") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g3 <- ggplot(kv.df, aes(y=g.fossil.gas)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.fossil.gas") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g4 <- ggplot(kv.df, aes(y=g.fossil.hard.coal)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.fossil.hard.coal") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g5 <- ggplot(kv.df, aes(y=g.fossil.oil)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.fossil.oil") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g6 <- ggplot(kv.df, aes(y=g.hydro.pumped)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.hydro.pumped") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g7 <- ggplot(kv.df, aes(y=g.hydro.run)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.hydro.run-of-river") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g8 <- ggplot(kv.df, aes(y=g.hydro.reservoir)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.hydro.reservoir") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g9 <- ggplot(kv.df, aes(y=g.nuclear)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.nuclear") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g10 <- ggplot(kv.df, aes(y=g.other)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.other") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g11 <- ggplot(kv.df, aes(y=g.renewable)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.renewable") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g12 <- ggplot(kv.df, aes(y=g.solar)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.solar") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g13 <- ggplot(kv.df, aes(y=g.waste)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.waste") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+g14 <- ggplot(kv.df, aes(y=g.wind.onshore)) + geom_boxplot() + stat_boxplot(geom = "errorbar", width = 0.2) + scale_y_continuous(name = "g.wind.onshore") + coord_flip() + theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank()) 
+
+plot_grid(g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12,g13,g14, labels = "")
+```
+
+
+```{r, echo = FALSE}
+#Plot Correlation Matrix of Key Variables
+cor.df <- kv.df[,-c(1)]
+names(cor.df) <- c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld")
+ggcorr(cor.df, method = c("everything", "pearson"),low = "seagreen", mid = "white", high = "rosybrown")
+```
+
+
+```{r, echo = FALSE,warning = FALSE, message=FALSE}
+#Plot the Scatterplot of LOAD vs. other variables
+s1 <- ggplot(cor.df, aes(y= LOAD, x=g1))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s2 <- ggplot(cor.df, aes(y= LOAD, x=g2))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s3 <- ggplot(cor.df, aes(y= LOAD, x=g3))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s4 <- ggplot(cor.df, aes(y= LOAD, x=g4))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s5 <- ggplot(cor.df, aes(y= LOAD, x=g5))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s6 <- ggplot(cor.df, aes(y= LOAD, x=g6))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s7 <- ggplot(cor.df, aes(y= LOAD, x=g7))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s8 <- ggplot(cor.df, aes(y= LOAD, x=g8))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s9 <- ggplot(cor.df, aes(y= LOAD, x=g9))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s11 <- ggplot(cor.df, aes(y= LOAD, x=g11))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s12 <- ggplot(cor.df, aes(y= LOAD, x=g12))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s13 <- ggplot(cor.df, aes(y= LOAD, x=g13))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s14 <- ggplot(cor.df, aes(y= LOAD, x=g14))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s15 <- ggplot(cor.df, aes(y= LOAD, x=tmp))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s16 <- ggplot(cor.df, aes(y= LOAD, x=prs))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s17 <- ggplot(cor.df, aes(y= LOAD, x=hmd))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s18 <- ggplot(cor.df, aes(y= LOAD, x=w_s))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s19 <- ggplot(cor.df, aes(y= LOAD, x=w_d))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s20 <- ggplot(cor.df, aes(y= LOAD, x=s_3))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+
+ggarrange(s1,s2,s3,s4,s5,s6,s7,s8,s9,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,ncol=4,nrow=5)
+
+```
+
+
+```{r, echo = FALSE}
+#Plot the Scatterplot of PRICE vs. other variables
+s1 <- ggplot(cor.df, aes(y= PRICE, x=g1))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s2 <- ggplot(cor.df, aes(y= PRICE, x=g2))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s3 <- ggplot(cor.df, aes(y= PRICE, x=g3))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s4 <- ggplot(cor.df, aes(y= PRICE, x=g4))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s5 <- ggplot(cor.df, aes(y= PRICE, x=g5))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s6 <- ggplot(cor.df, aes(y= PRICE, x=g6))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s7 <- ggplot(cor.df, aes(y= PRICE, x=g7))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s8 <- ggplot(cor.df, aes(y= PRICE, x=g8))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s9 <- ggplot(cor.df, aes(y= PRICE, x=g9))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s11 <- ggplot(cor.df, aes(y= PRICE, x=g11))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s12 <- ggplot(cor.df, aes(y= PRICE, x=g12))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s13 <- ggplot(cor.df, aes(y= PRICE, x=g13))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s14 <- ggplot(cor.df, aes(y= PRICE, x=g14))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s15 <- ggplot(cor.df, aes(y= PRICE, x=tmp))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s16 <- ggplot(cor.df, aes(y= PRICE, x=prs))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s17 <- ggplot(cor.df, aes(y= PRICE, x=hmd))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s18 <- ggplot(cor.df, aes(y= PRICE, x=w_s))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s19 <- ggplot(cor.df, aes(y= PRICE, x=w_d))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+s20 <- ggplot(cor.df, aes(y= PRICE, x=s_3))+geom_point(size = 0.1,color="rosybrown",alpha=0.2)+geom_smooth(color ='seagreen',size = 1)+ theme_bw() + theme(panel.border=element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line=element_line(color="black")) + theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+
+
+ggarrange(s1,s2,s3,s4,s5,s6,s7,s8,s9,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,ncol=4,nrow=5)
+
+```
+
+
+```{r, echo = FALSE}
+#Part 2. Classification
+#Add Column
+data <- engy.df[,c(3:16,20,22,23,26:33,35)]
+names(data) <- c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")
+data$high <- factor(ifelse(data$LOAD >= 32194, "1", "0"))
+data$med <- factor(ifelse(data$LOAD > 24807 & data$LOAD < 32194, "1", "0"))
+data$low <- factor(ifelse(data$LOAD <= 24807, "1", "0"))
+data$demand <- factor(ifelse(data$high == 1, "high",ifelse(data$med == 1, "median","low")))
+
+
+#Partition Data
+set.seed(1)
+train.index <- sample(nrow(data),round(nrow(data))*0.7)
+train <- data[train.index,]
+valid <- data[-train.index,]
+
+
+# run logistic regression
+# use glm() (general linear model) with family = "binomial" to fit a logistic 
+# regression.
+#logit.reg <- glm(Personal.Loan ~ ., data = train, family = "binomial") 
+logit.h1 <- glm(high ~ .-PRICE -LOAD -med -low -demand, data = train, family = binomial(link = "logit"))
+logit.m1 <- glm(med ~ .-PRICE -LOAD -high -low -demand, data = train, family = binomial(link = "logit"))
+logit.l1 <- glm(low ~ .-PRICE -LOAD -high -med -demand, data = train, family = binomial(link = "logit"))
+
+options(scipen=999)
+
+summary(logit.h1)
+summary(logit.m1)
+summary(logit.l1)
+
+
+#Optimize Logistic Regression - remove statistically insignificant variables
+logit.h2 <- glm(high ~ .-PRICE -LOAD -med -low -g10 -w_d -r_1 -demand, data = train, family = binomial(link = "logit"))
+logit.m2 <- glm(med ~ .-PRICE -LOAD -high -low -g2 -g11 -g14 -tmp -w_s -r_1 -r_3 -peak_hour -demand, data = train, family = binomial(link = "logit"))
+logit.l2 <- glm(low ~ .-PRICE -LOAD -high -med -g10 -hmd -w_s -w_d -r_3 -demand, data = train, family = binomial(link = "logit"))
+
+options(scipen=999)
+
+summary(logit.h2)
+summary(logit.m2)
+summary(logit.l2)
+
+```
+
+
+```{r, echo = FALSE}
+# use predict() with type = "response" to compute predicted probabilities.
+logit.pred.h <- predict(logit.h2, valid, type = "response")
+logit.pred.m <- predict(logit.m2, valid, type = "response")
+logit.pred.l <- predict(logit.l2, valid, type = "response")
+# first 5 actual and predicted records
+data.frame(actual = valid$high[1:5], predicted = logit.pred.h[1:5])
+data.frame(actual = valid$med[1:5], predicted = logit.pred.m[1:5])
+data.frame(actual = valid$low[1:5], predicted = logit.pred.l[1:5])
+
+
+# evaluate
+confusionMatrix(as.factor(ifelse(logit.pred.h > 0.5, 1, 0)), as.factor(valid$high), positive = "1")
+confusionMatrix(as.factor(ifelse(logit.pred.m > 0.5, 1, 0)), as.factor(valid$med), positive = "1")
+confusionMatrix(as.factor(ifelse(logit.pred.l > 0.5, 1, 0)), as.factor(valid$low), positive = "1")
+
+#Precision is the number of True Positives divided by the number of True Positives and False Positives.
+#Recall is the number of True Positives divided by the number of True Positives and the number of False Negatives.
+precision.h <- 2150/(2150+378)
+recall.h <- 2150/(2150+460)
+F1.h <- 2*((precision.h * recall.h)/(precision.h + recall.h))
+
+precision.m <- 3764/(3764+2048)
+recall.m <- 3764/(3764+1544)
+F1.m <- 2*((precision.m * recall.m)/(precision.m + recall.m))
+
+precision.l <- 2253/(2253+340)
+recall.l <- 2253/(2253+349)
+F1.l <- 2*((precision.l * recall.l)/(precision.l + recall.l))
+
+F1.h
+F1.m
+F1.l
+
+#plot colAUC
+ROC_h <- colAUC(logit.pred.h, valid$high,plotROC=TRUE)
+ROC_m <- colAUC(logit.pred.m, valid$med,plotROC=TRUE)
+ROC_l <- colAUC(logit.pred.l, valid$low,plotROC=TRUE)
+
+#calculate the area
+roc_h <- roc(valid$high, logit.pred.h)
+roc_m <- roc(valid$med, logit.pred.m)
+roc_l <- roc(valid$low, logit.pred.l)
+auc(roc_h)
+auc(roc_m)
+auc(roc_l)
+```
+
+
+```{r, echo = FALSE}
+# get the maximum y when comparing logit.pred.h, logit.pred.m, logit.pred.l
+result_tb = cbind(logit.pred.h, logit.pred.m, logit.pred.l)
+max_value = c()
+for (i in 1:nrow(result_tb)){
+   max_value[length(max_value)+1] = which(result_tb[i,]==max(result_tb[i,]))
+}
+
+x = as.data.frame(cbind(result_tb,max_value))
+x$max_value = ifelse(x$max_value==1,'high',ifelse(x$max_value==2, "median","low"))
+
+
+# Draw confusion matrix
+regression_con_matrix = gmodels::CrossTable(x = valid$demand,
+                                     y = x$max_value,
+                                    prop.chisq = TRUE)
+
+confusionMatrix(valid$demand,as.factor(x$max_value))
+
+```
+
+
+```{r}
+#Integrate into one
+data <- engy.df[,c(3:16,20,22,23,26:33,35)]
+names(data) <- c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")
+data$high <- factor(ifelse(data$LOAD >= 32194, "1", "0"))
+data$med <- factor(ifelse(data$LOAD > 24807 & data$LOAD < 32194, "1", "0"))
+data$low <- factor(ifelse(data$LOAD <= 24807, "1", "0"))
+data$demand <- factor(ifelse(data$high == 1, "1",ifelse(data$med == 1, "0","-1")))
+data <- data.frame(demand=factor(data[,"demand"]),scale(data[,c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")]))
+
+
+#Partition Data
+set.seed(1)
+train.index <- sample(nrow(data),round(nrow(data))*0.7)
+train <- data[train.index,]
+valid <- data[-train.index,]
+
+
+logit <- polr(demand~.-LOAD, data = train, method = "logistic", Hess = T)
+coeftest(logit)
+
+logit_final <- polr(demand~.-LOAD -g10 -PRICE -w_d -r_3 -s_3 -cld, data = train, method = "logistic", Hess = T)
+summary(logit_final)
+
+pred_final<-predict(logit_final,valid,response = T)
+
+regression_con_matrix = gmodels::CrossTable(x = valid$demand,
+                                     y =pred_final,
+                                    prop.chisq = TRUE)
+
+confusionMatrix(as.factor(valid$demand),as.factor(pred_final))
+
+```
+
+
+```{r}
+#Add Interaction term
+data <- engy.df[,c(3:16,20,22,23,26:33,35)]
+names(data) <- c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")
+data$high <- factor(ifelse(data$LOAD >= 32194, "1", "0"))
+data$med <- factor(ifelse(data$LOAD > 24807 & data$LOAD < 32194, "1", "0"))
+data$low <- factor(ifelse(data$LOAD <= 24807, "1", "0"))
+data$demand <- factor(ifelse(data$high == 1, "1",ifelse(data$med == 1, "0","-1")))
+data <- data.frame(demand=factor(data[,"demand"]),scale(data[,c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")]))
+
+#Partition Data
+set.seed(1)
+train.index <- sample(nrow(data),round(nrow(data))*0.7)
+train <- data[train.index,]
+valid <- data[-train.index,]
+
+
+logit <- polr(demand~.-LOAD + I(g8^2) +I(g3^2) +I(g6^2), data = train, method = "logistic", Hess = T)
+coeftest(logit)
+
+logit_final <- polr(demand~.-LOAD -g10 -PRICE -w_d -r_3 -s_3 -cld, data = train, method = "logistic", Hess = T)
+summary(logit_final)
+
+pred_final<-predict(logit_final,valid,response = T)
+
+regression_con_matrix = gmodels::CrossTable(x = valid$demand,
+                                     y =pred_final,
+                                    prop.chisq = TRUE)
+
+confusionMatrix(as.factor(valid$demand),as.factor(pred_final))
+```
+
+
+```{r, echo = FALSE}
+# K-NN
+data <- engy.df[,c(3:16,20,22,23,26:33,35)]
+names(data) <- c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")
+data$high <- factor(ifelse(data$LOAD >= 32194, "1", "0"))
+data$med <- factor(ifelse(data$LOAD > 24807 & data$LOAD < 32194, "1", "0"))
+data$low <- factor(ifelse(data$LOAD <= 24807, "1", "0"))
+data$demand <- factor(ifelse(data$high == 1, "high",ifelse(data$med == 1, "median","low")))
+
+#Partition Data
+set.seed(1)
+train.index <- sample(nrow(data),round(nrow(data))*0.7)
+train <- data[train.index,]
+valid <- data[-train.index,]
+
+data <- data[,-c(27:29)]
+train <- train[,-c(27:29)]
+valid <- valid[,-c(27:29)]
+
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x))) }
+
+train.norm <- as.data.frame(lapply(train[1:26], normalize))
+valid.norm <- as.data.frame(lapply(valid[1:26], normalize))
+
+train.labels <- train[, 27]
+valid.labels <- valid[, 27]
+
+# k=3
+# Training model on dta_training
+data_test_pred <- knn(train = train.norm, test = valid.norm, cl = train.labels, k=3)
+
+tab <- table(data_test_pred,valid.labels)
+tab
+
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+```
+
+
+```{r}
+#find the optimized k
+# declaration to initiate for loop
+i=1
+# declaration to initiate for loop
+k.optm=1
+for (i in 1:50){ 
+    knn.mod=class::knn(train = train.norm, test = valid.norm, cl = train.labels, k=i)
+    k.optm[i]=100 * sum(valid.labels == knn.mod)/NROW(valid.labels)
+    k=i  
+    cat(k,'=',k.optm[i],'\n')       # to print % accuracy 
+}
+
+
+x <- as.data.frame(k.optm)
+y <- x %>% rowid_to_column(var="kvalue")
+
+plot(y, type = "b", xlab="k-value", ylab="Accuracy(%)")
+# the best k is 13, with an accuracy of 87.17%
+```
+
+
+```{r}
+#k=13
+data_test_pred <- knn(train = train.norm, test = valid.norm, cl = train.labels, k=13)
+
+gmodels::CrossTable(x = valid.labels, y = data_test_pred, prop.chisq = T)
+
+tab <- table(data_test_pred,valid.labels)
+
+
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+
+
+# Evaluate the predictive performance of KNN using confusion matrices
+data_k13_conf_mat = gmodels::CrossTable(x = valid.labels, y =  data_test_pred,prop.chisq = T)
+
+prediction=as.factor(data_test_pred)
+test=as.factor(valid.labels)
+confusionMatrix(prediction,test)
+
+```
+
+
+```{r}
+data <- engy.df[,c(3:16,20,22,23,26:33,35)]
+names(data) <- c("g1","g2","g3","g4","g5","g6","g7","g8","g9","g10","g11","g12","g13","g14","LOAD","PRICE","tmp","prs","hmd","w_s","w_d","r_1","r_3","s_3","cld","peak_hour")
+data$high <- factor(ifelse(data$LOAD >= 32194, "1", "0"))
+data$med <- factor(ifelse(data$LOAD > 24807 & data$LOAD < 32194, "1", "0"))
+data$low <- factor(ifelse(data$LOAD <= 24807, "1", "0"))
+data$demand <- factor(ifelse(data$high == 1, "high",ifelse(data$med == 1, "median","low")))
+
+#Partition Data
+set.seed(1)
+train.index <- sample(nrow(data),round(nrow(data))*0.7)
+train <- data[train.index,]
+valid <- data[-train.index,]
+
+class.tree <- rpart(demand ~ .-LOAD, data = data, 
+                    control = rpart.control(cp=0.01), method = "class")
+## plot tree
+# use prp() to plot the tree. You can control plotting parameters such as color, shape, 
+# and information displayed (which and where).
+prp(class.tree, type = 4, extra = 4, varlen = 0)
+```
+
+
+```{r}
+# Decision Tree
+# use rpart() to run a classification tree.
+# define rpart.control() in rpart() to determine the depth of the tree.
+data <- data[,-c(15,27:29)]
+
+#Partition Data
+set.seed(1)
+train.index <- sample(nrow(data),round(nrow(data))*0.7)
+train <- data[train.index,]
+valid <- data[-train.index,]
+
+# classification tree
+default.ct <- rpart(demand ~ ., data = train, method = "class")
+# plot tree
+prp(default.ct, type = 4, extra = 4, under = TRUE, varlen = 0)
+
+# classify records in the validation data.
+# set argument type = "class" in predict() to generate predicted class membership.
+default.ct.point.pred.train <- predict(default.ct,train,type = "class")
+# generate confusion matrix for training data
+confusionMatrix(default.ct.point.pred.train, as.factor(train$demand))
+
+#Using Valid
+default.ct.1 <- rpart(demand ~ ., data = valid, method = "class")
+prp(default.ct.1, type = 4, extra = 4, under = TRUE, varlen = 0)
+default.ct.point.pred.valid <- predict(default.ct.1,valid,type = "class")
+confusionMatrix(default.ct.point.pred.valid, as.factor(valid$demand))
+
+
+#What happens to deeper tree?
+deeper.ct <- rpart(demand ~ ., data = train, method = "class", cp = 0, minsplit = 1)
+# count number of leaves
+length(deeper.ct$frame$var[deeper.ct$frame$var == "<leaf>"])
+# plot tree
+prp(deeper.ct, type = 1, extra = 1, under = TRUE, split.font = 1, varlen = -10, 
+    box.col=ifelse(deeper.ct$frame$var == "<leaf>", 'gray', 'white'))  
+
+deeper.ct.point.pred.train <- predict(deeper.ct,train,type = "class")
+confusionMatrix(deeper.ct.point.pred.train, as.factor(train$demand))
+
+deeper.ct.point.pred.valid <- predict(deeper.ct,valid,type = "class")
+confusionMatrix(deeper.ct.point.pred.valid, as.factor(valid$demand))
+
+```
+
+
+```{r}
+# argument xval refers to the number of folds to use in rpart's built-in
+# cross-validation procedure
+# argument cp sets the smallest value for the complexity parameter.
+cv.ct <- rpart(demand ~ ., data = train, method = "class", 
+               cp = 0.00001, minsplit = 5, xval = 5)
+# minsplit is the minimum number of observations in a node for a split to be attempted. xval is number K of folds in a K-fold cross-validation.
+
+# use printcp() to print the table. 
+printcp(cv.ct)
+# Print out the cp table of cross-validation errors. The R-squared for a regression tree is 1 minus rel error. xerror (or relative cross-validation error where "x" stands for "cross") is a scaled version of overall average of the 5 out-of-sample errors across the 5 folds.
+
+pruned.tree <- prune(cv.ct, cp = 0.0002898)
+pruned.tree.pred <- predict(pruned.tree, train, type = "class")
+confusionMatrix(pruned.tree.pred, as.factor(train$demand))
+pruned.tree.pred.2 <- predict(pruned.tree, valid, type = "class")
+confusionMatrix(pruned.tree.pred.2, as.factor(valid$demand))
+
+
+# Missclassification Error
+sum(predict(cv.ct, type="class")!=train$demand)/nrow(train)
+
+# prune by lower cp
+pruned.ct <- prune(cv.ct, 
+                   cp = cv.ct$cptable[which.min(cv.ct$cptable[,"xerror"]),"CP"])
+length(pruned.ct$frame$var[pruned.ct$frame$var == "<leaf>"])
+prp(pruned.ct, type = 4, extra = 4, varlen = -10)  
+
+
+#find the first value that is less than xerror min + xstd, the corresponding node is 69
+```
+
+
+```{r}
+#Random Forest
+rf <- randomForest(as.factor(demand) ~ ., data = train, ntree = 300, 
+                   mtry = 8, nodesize = 5, importance = TRUE)  
+
+## variable importance plot
+varImpPlot(rf, type = 1)
+
+## confusion matrix
+rf.pred <- predict(rf, valid)
+confusionMatrix(rf.pred, as.factor(valid$demand))
+```
+
+
+```{r}
+#Boost Tree
+train$demand <- as.factor(train$demand)
+
+boost <- boosting(demand ~ ., data = train)
+pred <- predict(boost, valid)
+confusionMatrix(as.factor(pred$class), as.factor(valid$demand))
+```
