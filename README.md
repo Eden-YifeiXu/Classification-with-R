@@ -1,0 +1,2 @@
+# Classification-with-R
+In this project, I will describe and discover structure in a wrangled dataset, train and validate my models, and interpret the best model in a professional quality report. For each significant step, I will document my results, interpretations, assumptions, and process. I will select a target categorical variable to model with Logistic Regression, K-NN, and Classification Trees.
